@@ -13,12 +13,14 @@
 #include <iostream>
 #include <vector>
 #include <mutex>
+#include <thread>
+
 
 std::mutex m;
 class Data
 {
+public:    
     std::mutex m;
-public:
     int a;
     int b;
 };
@@ -33,15 +35,16 @@ void swap1(Data& data1, Data& data2)
     d = data1.b;
     e = data2.a;
     f = data2.b;
-    m.lock();
+    std::lock(data1.m, data2.m);
+    std::lock_guard lk1(data1.m, std::adopt_lock);
+    std::lock_guard lk2(data2.m, std::adopt_lock);
     data2.a = c;
     data2.b = d;
     data1.a = e;
     data1.b = f;
-    m.unlock();
 }
 
-// Работает неустойчиво, то меняет данные в двух потоках, то не меняет
+// Работает устойчиво, стабильно меняет данные местами
 void swap2(Data& data1, Data& data2)
 {
     int c;
@@ -53,7 +56,9 @@ void swap2(Data& data1, Data& data2)
     e = data2.a;
     f = data2.b;
 
-    std::lock_guard lk(m);
+    std::unique_lock lk1(data1.m, std::defer_lock);
+    std::unique_lock lk2(data2.m, std::defer_lock);
+    std::lock(lk1, lk2);
     data2.a = c;
     data2.b = d;
     data1.a = e;
@@ -72,30 +77,14 @@ void swap3(Data& data1, Data& data2)
     d = data1.b;
     e = data2.a;
     f = data2.b;
-    std::scoped_lock lk(m);
+    std::scoped_lock(data1.m, data2.m);
+
     data2.a = c;
     data2.b = d;
     data1.a = e;
     data1.b = f;
 }
 
-// Работает неустойчиво, то меняет данные в двух потоках, то не меняет
-void swap4(Data& data1, Data& data2)
-{
-    int c;
-    int d;
-    int e;
-    int f;
-    c = data1.a;
-    d = data1.b;
-    e = data2.a;
-    f = data2.b;
-    std::unique_lock lk(m);
-    data2.a = c;
-    data2.b = d;
-    data1.a = e;
-    data1.b = f;
-}
 int main()
 {
     std::cout << "Hello World!\n";
@@ -113,7 +102,6 @@ int main()
     std::cout << " data2.a = " << data2.a << std::endl;
     std::cout << " data2.b = " << data2.b << std::endl;
 
-    // в двух потоках дважды меняет местами данные и результат остаётся тот же
     std::thread t1(swap2, std::ref(data1), std::ref(data2));
     std::thread t2(swap2, std::ref(data1), std::ref(data2));
     t1.join();
